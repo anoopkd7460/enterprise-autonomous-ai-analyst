@@ -33,7 +33,7 @@ if st.button("Ask", type="primary") and question:
             result = answer_question(question)
 
             st.subheader("Answer")
-            st.write(result.explanation)
+            st.markdown(result.explanation.replace("$","₹"), unsafe_allow_html=False)
 
             with st.expander("Show data"):
                 st.dataframe(result.data)
