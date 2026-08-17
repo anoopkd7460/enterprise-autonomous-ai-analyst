@@ -45,3 +45,5 @@ htmlcov/
 # Temporary files
 *.tmp
 *.temp
+
+scratch_test.py
