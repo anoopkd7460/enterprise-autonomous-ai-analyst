@@ -8,3 +8,7 @@ plotly
 openpyxl
 sqlalchemy
 openai
+langchain
+langgraph
+chromadb
+pypdf
