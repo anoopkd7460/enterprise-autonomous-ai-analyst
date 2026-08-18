@@ -76,7 +76,7 @@ def run_sql(query: str) -> pd.DataFrame:
     """Executes a read-only SQL query and returns a DataFrame.
     Basic safety check: only SELECT statements are allowed."""
     cleaned = query.strip().rstrip(";")
-    if not cleaned.lower().startswith("select"):
+    if not cleaned.lower().startswith(("select","with")):
         raise ValueError("Only SELECT queries are allowed for safety.")
     with engine.connect() as conn:
         return pd.read_sql(text(cleaned), conn)
