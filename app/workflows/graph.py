@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph, END
 
 from app.agents.sql_agent import answer_question as sql_answer
 from app.agents.document_agent import answer_question as doc_answer
+from app.services.cache_service import get_cached_answer, set_cached_answer
 from app.llm.client import chat
 from app.utils.logger import get_logger
 
@@ -140,7 +141,11 @@ planner_graph = build_graph()
 
 
 def answer_question(question: str) -> str:
-    """Main entry point: runs the full planner workflow and returns the final answer."""
+    """Main entry point: checks cache first, then runs the full planner workflow."""
+    cached = get_cached_answer(question)
+    if cached:
+        return cached
+
     result = planner_graph.invoke({
         "question": question,
         "route": "",
@@ -148,4 +153,6 @@ def answer_question(question: str) -> str:
         "doc_result": None,
         "final_answer": "",
     })
-    return result["final_answer"]
+    answer = result["final_answer"]
+    set_cached_answer(question, answer)
+    return answer
