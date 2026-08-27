@@ -27,6 +27,7 @@ The system:
     +----------------+----------------+
     v                                 v
 
+```
 SQL Agent Document Agent
 (LLM writes SQL, (RAG: chunks + embeds
 runs it, self-corrects documents in ChromaDB,
@@ -43,6 +44,7 @@ skip the pipeline entirely)
 +----------+----------+
 v v
 Streamlit UI FastAPI (/ask, /health)
+```
 
 
 ## Tech stack
@@ -69,7 +71,7 @@ Streamlit UI FastAPI (/ask, /health)
 - **Graceful degradation** — if Redis isn't running, the app still works correctly, just without caching, instead of crashing.
 
 ## Project structure
-
+```
 enterprise-ai-analyst/
 ├── app/
 │ ├── main.py # Streamlit UI
@@ -96,7 +98,7 @@ enterprise-ai-analyst/
 ├── Dockerfile
 ├── requirements.txt
 └── .env.example
-
+```
 
 
 ## Getting started (if you're new to this project)
