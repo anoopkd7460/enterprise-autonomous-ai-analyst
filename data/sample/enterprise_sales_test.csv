@@ -1,0 +1,17 @@
+region,product,quarter,units_sold,revenue
+North,Laptop,Q4 2024,120,120000
+North,Mobile,Q4 2024,180,90000
+North,Tablet,Q4 2024,95,57000
+North,Monitor,Q4 2024,70,42000
+South,Laptop,Q4 2024,150,150000
+South,Mobile,Q4 2024,220,110000
+South,Tablet,Q4 2024,130,78000
+South,Monitor,Q4 2024,85,51000
+East,Laptop,Q4 2024,100,100000
+East,Mobile,Q4 2024,160,80000
+East,Tablet,Q4 2024,90,54000
+East,Monitor,Q4 2024,60,36000
+West,Laptop,Q4 2024,200,200000
+West,Mobile,Q4 2024,140,70000
+West,Tablet,Q4 2024,110,66000
+West,Monitor,Q4 2024,75,45000
