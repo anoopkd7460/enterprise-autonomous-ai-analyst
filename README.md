@@ -18,32 +18,33 @@ The system:
 
 ## Architecture
 
-                User Question
-                     |
-                     v
-            Planner (LangGraph)
-             [heuristic + LLM routing]
-                     |
-    +----------------+----------------+
-    v                                 v
+## Architecture
 
 ```
-SQL Agent Document Agent
-(LLM writes SQL, (RAG: chunks + embeds
-runs it, self-corrects documents in ChromaDB,
-on error) retrieves relevant chunks)
-| |
-+----------------+----------------+
-v
-Combine Answers (LLM)
-|
-v
-Redis cache (repeat questions
-skip the pipeline entirely)
-|
-+----------+----------+
-v v
-Streamlit UI FastAPI (/ask, /health)
+                    User Question
+                         |
+                         v
+                Planner (LangGraph)
+                 [heuristic + LLM routing]
+                         |
+        +----------------+----------------+
+        v                                 v
+   SQL Agent                       Document Agent
+   (LLM writes SQL,                (RAG: chunks + embeds
+    runs it, self-corrects          documents in ChromaDB,
+    on error)                       retrieves relevant chunks)
+        |                                 |
+        +----------------+----------------+
+                         v
+                Combine Answers (LLM)
+                         |
+                         v
+              Redis cache (repeat questions
+               skip the pipeline entirely)
+                         |
+              +----------+----------+
+              v                     v
+        Streamlit UI          FastAPI (/ask, /health)
 ```
 
 
