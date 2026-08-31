@@ -197,25 +197,31 @@ def call_document_agent(state: PlannerState) -> PlannerState:
     return state
 
 def call_data_analyst(state: PlannerState) -> PlannerState:
-    """Run the Data Analyst Agent angainst the uploaded dataset."""
+    """Run the Data Analyst Agent against the uploaded dataset."""
 
-    dataframe = state.get('dataframe')
+    dataframe = state.get("dataframe")
 
     if dataframe is None:
-        logger.warning("Analytics route selected but no dataset was provided.")
+        logger.warning(
+            "Analytics route selected but no dataset was provided."
+        )
 
-        state['analytics_result'] = {'error': 'No CSV or Excel dataset has been uploaded.'}
+        state["analytics_result"] = {
+            "error": "No CSV or Excel dataset has been uploaded."
+        }
 
         return state
 
     result = analyze_dataset(
-        dataframe, state['question'],
+        dataframe,
+        state["question"],
     )
 
-    state['analytics_result'] = {'profile': result.profile,
-                                 'analysis': result.analysis,
-                                 'answer': result.answer,
-                                }
+    state["analytics_result"] = {
+        "profile": result.profile,
+        "analysis": result.analysis,
+        "answer": result.answer,
+    }
 
     return state
 
@@ -331,21 +337,43 @@ def build_graph():
 planner_graph = build_graph()
 
 
-def answer_question(question: str, dataframe=None) -> str:
-    """Main entry point: checks cache first, then runs the full planner workflow."""
-    cached = get_cached_answer(question)
+def answer_question(
+    question: str,
+    dataframe=None,
+) -> str:
+    """
+    Main entry point for the Planner workflow.
+
+    Checks the dataset-aware cache first, then runs
+    the LangGraph workflow when no cached answer exists.
+    """
+
+    cached = get_cached_answer(
+        question,
+        dataframe=dataframe,
+    )
+
     if cached:
         return cached
 
-    result = planner_graph.invoke({
-        "question": question,
-        "route": "",
-        "dataframe": dataframe,
-        "sql_result": None,
-        "doc_result": None,
-        "analytics_result": None,
-        "final_answer": "",
-    })
+    result = planner_graph.invoke(
+        {
+            "question": question,
+            "route": "",
+            "dataframe": dataframe,
+            "sql_result": None,
+            "doc_result": None,
+            "analytics_result": None,
+            "final_answer": "",
+        }
+    )
+
     answer = result["final_answer"]
-    set_cached_answer(question, answer)
+
+    set_cached_answer(
+        question,
+        answer,
+        dataframe=dataframe,
+    )
+
     return answer
