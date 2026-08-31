@@ -3,17 +3,10 @@ from typing import Any
 
 import pandas as pd
 
-from app.analytics.analysis_tools import (
-    correlation_matrix,
-    group_by_metric,
-    summary_statistics,
-    top_n,
-)
-from app.analytics.profiler import (
-    get_numeric_summary,
-    profile_dataset,
-)
+from app.analytics.profiler import profile_dataset
 from app.llm.client import chat
+from app.llm.langchain_client import get_chat_model
+from app.tools.analytics_tools import create_analytics_tools
 from app.utils.logger import get_logger
 
 
@@ -23,35 +16,38 @@ logger = get_logger(__name__)
 ANALYST_SYSTEM_PROMPT = """
 You are an experienced business data analyst.
 
-Your task is to interpret deterministic analysis results
-calculated using Python/Pandas and convert them into useful
-business insights.
+You analyze user-provided datasets using deterministic
+analytics tools.
 
-You will receive:
+Your workflow is:
 
-1. The user's business question.
-2. Dataset profile information.
-3. Deterministically calculated analysis results.
+1. Understand the user's business question.
+2. Select the appropriate analytics tool.
+3. Use the tool to calculate the requested result.
+4. Interpret the calculated result.
+5. Provide a concise business explanation.
 
 Rules:
 
+- Always use an analytics tool when the question requires
+  a calculation.
 - Never invent numbers.
-- Use only information present in the supplied analysis results.
-- Do not perform complex calculations yourself.
+- Never perform important numerical calculations yourself
+  when a tool can calculate them.
+- Use only numbers returned by the analytics tools.
 - Clearly distinguish facts from interpretations.
-- Identify the most important business insight.
-- If the available analysis is insufficient, explicitly say so.
-- Provide an actionable business recommendation.
-- Keep the explanation concise and executive-friendly.
+- If the available dataset cannot answer the question,
+  explain why.
+- Provide one actionable recommendation.
 - Avoid unnecessary technical terminology.
 
-Structure your response as:
+Return:
 
 Key Insight:
 <main business finding>
 
 Evidence:
-<important evidence supporting the finding>
+<important numerical evidence>
 
 Recommendation:
 <one actionable recommendation>
@@ -66,15 +62,12 @@ class DataAnalystResult:
     answer: str
 
 
-def analyze_dataset(
-    df: pd.DataFrame,
-    question: str,
-) -> DataAnalystResult:
+def analyze_dataset(df: pd.DataFrame, question: str,) -> DataAnalystResult:
     """
-    Analyze an uploaded dataset and generate business insights.
+    Analyze an uploaded dataset using LLM-driven tool selection.
 
-    Python/Pandas performs deterministic calculations.
-    The LLM interprets those calculations.
+    The LLM decides which analytics tools should be used.
+    Python/Pandas performs the deterministic calculation.
     """
 
     if df.empty:
@@ -83,114 +76,118 @@ def analyze_dataset(
     if not question or not question.strip():
         raise ValueError("Analysis question cannot be empty.")
 
-    logger.info(
-        "Starting dataset analysis: rows=%d, columns=%d",
-        len(df),
-        len(df.columns),
-    )
+    logger.info("Starting LLM-driven dataset analysis: rows=%d, columns=%d",
+                len(df),
+                len(df.columns),)
 
-    # ---------------------------------------------------------
-    # 1. Profile the dataset
-    # ---------------------------------------------------------
+
+    # Profile Dataset
 
     profile = profile_dataset(df)
 
-    # ---------------------------------------------------------
-    # 2. Generate deterministic numerical summary
-    # ---------------------------------------------------------
+    # Create tools bound to this dataset
 
-    analysis: dict[str, Any] = {
-        "numeric_summary": get_numeric_summary(df),
-    }
+    tools = create_analytics_tools(df)
 
-    # ---------------------------------------------------------
-    # 3. Determine which deterministic analysis is required
-    #
-    # NOTE:
-    # This is intentionally rule-based in Phase 2.
-    # We will replace this with LLM tool calling later.
-    # ---------------------------------------------------------
+    # Create LangChain chat model
 
-    question_lower = question.lower()
+    model = get_chat_model()
 
-    if "top" in question_lower and "product" in question_lower:
+    # Bind analytics tools to the LLM
 
-        if "product" in df.columns and "revenue" in df.columns:
+    model_with_tools = model.bind_tools(tools)
 
-            logger.info(
-                "Running top-product revenue analysis."
-            )
+    # Ask the LLM to determine the required tool
 
-            analysis["top_products"] = top_n(
-                df=df,
-                group_column="product",
-                metric_column="revenue",
-                n=5,
-            ).to_dict(orient="records")
+    response = model_with_tools.invoke(
+        [
+            (
+                "system",
+                ANALYST_SYSTEM_PROMPT,
+            ),
+            (
+                "user",
+                (
+                    f'Dataset columns:\n'
+                    f'{list(df.columns)}\n\n'
+                    f'User question:\n'
+                    f'{question}'
+                ),
+            ),
+        ]
+    )
 
-    elif (
-        "region" in question_lower
-        and "revenue" in question_lower
-    ):
+    # Inspect tool calls
 
-        if "region" in df.columns and "revenue" in df.columns:
+    tool_calls = getattr(
+        response,
+        "tool_calls",
+        [],
+    )
 
-            logger.info(
-                "Running regional revenue analysis."
-            )
+    if not tool_calls:
+        logger.warning("LLM did not select an analytics tool.")
 
-            analysis["revenue_by_region"] = group_by_metric(
-                df=df,
-                group_column="region",
-                metric_column="revenue",
-            ).to_dict(orient="records")
+        return DataAnalystResult(
+            question=question,
+            profile=profile,
+            analysis={},
+            answer=response.content,
+        )
 
-    elif "correlation" in question_lower:
+    # Execute selected tools
+
+    analysis: dict[str, Any] = {}
+
+    for tool_call in tool_calls:
+        tool_name = tool_call['name']
+        tool_args = tool_call['args']
 
         logger.info(
-            "Running correlation analysis."
+            "LLM selected tool: %s with args: %s",
+            tool_name,
+            tool_args,
         )
 
-        analysis["correlation"] = (
-            correlation_matrix(df).to_dict()
+        selected_tool = next(
+            (
+                tool for tool in tools
+                if tool.name == tool_name
+            ),
+            None,
         )
 
-    else:
+        if selected_tool is None:
+            raise ValueError(f"Unknown analytics tool: {tool_name}")
+
+        result = selected_tool.invoke(tool_args)
+
+        analysis[tool_name] = result
+
+        # Ask LLM to interpret deterministic results
+
+        interpretation_prompt = (
+            f'User question:\n'
+            f'{question}\n\n'
+            f'Dataset profile:\n'
+            f'{profile}\n\n'
+            f'Deterministically calculated results:\n'
+            f'{analysis}\n\n'
+            f'Interpret these results and provide the business answer.'
+        )
+
+        answer = chat(
+            ANALYST_SYSTEM_PROMPT,
+            interpretation_prompt,
+        )
 
         logger.info(
-            "No specialized analysis requested; using dataset summary."
+            "LLM-driven dataset analysis completed successfully."
         )
 
-    # ---------------------------------------------------------
-    # 4. Send calculated results to the LLM
-    # ---------------------------------------------------------
-
-    prompt = (
-        f"User question:\n"
-        f"{question}\n\n"
-        f"Dataset profile:\n"
-        f"{profile}\n\n"
-        f"Deterministically calculated analysis:\n"
-        f"{analysis}\n\n"
-        f"Business analysis:"
-    )
-
-    answer = chat(
-        ANALYST_SYSTEM_PROMPT,
-        prompt,
-    )
-
-    # ---------------------------------------------------------
-    # 5. Return structured result
-    # ---------------------------------------------------------
-
-    logger.info(
-        "Dataset analysis completed successfully."
-    )
-
-    return DataAnalystResult(
-        question=question,
-        profile=profile,
-        analysis=analysis,
-        answer=answer,
-    )
+        return DataAnalystResult(
+            question=question,
+            profile=profile,
+            analysis=analysis,
+            answer=answer,
+        )
