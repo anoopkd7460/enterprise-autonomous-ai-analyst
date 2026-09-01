@@ -18,7 +18,7 @@ from app.api.schemas import (
     HealthResponse,
 )
 from app.utils.logger import get_logger
-from app.workflows.graph import answer_question
+from app.workflows.graph import analyze_with_details
 
 
 logger = get_logger(__name__)
@@ -121,14 +121,31 @@ def analyze(
         # Run existing AI workflow
         # -------------------------------------------------
 
-        answer = answer_question(
+        result = analyze_with_details(
             question,
             dataframe=dataframe,
         )
 
+        answer = result["final_answer"]
+
+        chart = None
+
+        analytics_result = result.get(
+            "analytics_result"
+        )
+
+        if analytics_result:
+            chart_figure = analytics_result.get(
+                "chart"
+            )
+
+            if chart_figure is not None:
+                chart = chart_figure.to_dict()
+
         return AnalyzeResponse(
             question=question,
             answer=answer,
+            chart=chart,
         )
 
     except HTTPException:

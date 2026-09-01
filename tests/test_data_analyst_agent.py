@@ -161,3 +161,124 @@ def test_data_analyst_agent_region_revenue(monkeypatch):
         ][0]["revenue"]
         == 2200
     )
+
+def test_visualization_created_for_top_n(monkeypatch):
+
+    from app.agents import data_analyst_agent
+
+    class FakeResponse:
+        tool_calls = [
+            {
+                "name": "top_n_tool",
+                "args": {
+                    "group_column": "product",
+                    "metric_column": "revenue",
+                    "n": 2,
+                },
+            }
+        ]
+        content = ""
+
+    class FakeModel:
+
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        data_analyst_agent,
+        "get_chat_model",
+        lambda: FakeModel(),
+    )
+
+    monkeypatch.setattr(
+        data_analyst_agent,
+        "chat",
+        lambda *args, **kwargs: "Business answer",
+    )
+
+    df = pd.DataFrame(
+        {
+            "product": [
+                "Laptop",
+                "Mobile",
+                "Tablet",
+            ],
+            "revenue": [
+                3000,
+                1500,
+                700,
+            ],
+        }
+    )
+
+    result = data_analyst_agent.analyze_dataset(
+        df,
+        "What are the top products by revenue?",
+    )
+
+    assert result.chart is not None
+
+
+def test_visualization_created_for_trend(monkeypatch):
+
+    from app.agents import data_analyst_agent
+
+    class FakeResponse:
+        tool_calls = [
+            {
+                "name": "trend_analysis_tool",
+                "args": {
+                    "period_column": "date",
+                    "metric_column": "revenue",
+                    "frequency": "month",
+                },
+            }
+        ]
+        content = ""
+
+    class FakeModel:
+
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            return FakeResponse()
+
+    monkeypatch.setattr(
+        data_analyst_agent,
+        "get_chat_model",
+        lambda: FakeModel(),
+    )
+
+    monkeypatch.setattr(
+        data_analyst_agent,
+        "chat",
+        lambda *args, **kwargs: "Trend answer",
+    )
+
+    df = pd.DataFrame(
+        {
+            "date": [
+                "2024-01-01",
+                "2024-02-01",
+                "2024-03-01",
+                "2024-04-01",
+            ],
+            "revenue": [
+                1000,
+                1500,
+                2000,
+                2500,
+            ],
+        }
+    )
+
+    result = data_analyst_agent.analyze_dataset(
+        df,
+        "Show the revenue trend.",
+    )
+
+    assert result.chart is not None

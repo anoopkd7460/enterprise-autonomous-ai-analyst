@@ -11,6 +11,7 @@ from typing import Any
 
 import pandas as pd
 
+from app.analytics.chart_generator import create_bar_chart, create_line_chart
 from app.analytics.profiler import profile_dataset
 from app.llm.client import chat
 from app.llm.langchain_client import get_chat_model
@@ -74,6 +75,61 @@ class DataAnalystResult:
     profile: dict[str, Any]
     analysis: dict[str, Any]
     answer: str
+    chart: Any = None
+
+
+def _create_visualization(
+    tool_name: str,
+    result: Any,
+):
+    """
+    Create a visualization from deterministic analytics results.
+
+    Visualization is generated only for analytics operations
+    where a chart provides meaningful business value.
+    """
+
+    if tool_name in (
+        "top_n_tool",
+        "group_by_metric_tool",
+    ):
+        if not result:
+            return None
+
+        chart_df = pd.DataFrame(result)
+
+        columns = list(chart_df.columns)
+
+        if len(columns) < 2:
+            return None
+
+        return create_bar_chart(
+            chart_df,
+            columns[0],
+            columns[1],
+            "Analytics Result",
+        )
+
+    if tool_name == "trend_analysis_tool":
+        if not result:
+            return None
+
+        chart_df = pd.DataFrame(result)
+
+        columns = list(chart_df.columns)
+
+        if len(columns) < 2:
+            return None
+        
+        return create_line_chart(
+            chart_df,
+            columns[0],
+            columns[1],
+            "Metric Trend",
+        )
+
+    return None
+
 
 
 def analyze_dataset(
@@ -255,6 +311,11 @@ def analyze_dataset(
 
         analysis[tool_name] = result
 
+        chart = _create_visualization(
+            tool_name,
+            result,
+        )
+
         logger.info(
             "Analytics tool completed successfully: %s",
             tool_name,
@@ -288,4 +349,5 @@ def analyze_dataset(
         profile=profile,
         analysis=analysis,
         answer=answer,
+        chart=chart,
     )

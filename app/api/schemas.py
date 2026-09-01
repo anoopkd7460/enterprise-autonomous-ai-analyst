@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Any
 
 class AnalyzeRequest(BaseModel):
     """Request body for the AI analyst."""
@@ -14,7 +15,7 @@ class AnalyzeResponse(BaseModel):
 
     question: str
     answer: str
-
+    chart: dict[str, Any] | None = None
 
 class HealthResponse(BaseModel):
     """Health-check response."""

@@ -378,6 +378,7 @@ def call_data_analyst(
             "profile": result.profile,
             "analysis": result.analysis,
             "answer": result.answer,
+            "chart": result.chart,
         }
 
         return state
@@ -570,6 +571,38 @@ def build_graph():
 
 planner_graph = build_graph()
 
+def analyze_with_details(
+    question: str,
+    dataframe=None,
+) -> dict:
+    """
+    Run the Planner workflow and return the complete result.
+
+    This is used by API clients that need access to
+    analytics metadata such as generated visualizations.
+
+    Unlike answer_question(), this function does not use
+    the response cache because the complete workflow result
+    may contain non-cacheable objects such as Plotly figures.
+    """
+
+    logger.info(
+        "Running detailed analysis workflow."
+    )
+
+    result = planner_graph.invoke(
+        {
+            "question": question,
+            "route": "",
+            "dataframe": dataframe,
+            "sql_result": None,
+            "doc_result": None,
+            "analytics_result": None,
+            "final_answer": "",
+        }
+    )
+
+    return result
 
 def answer_question(
     question: str,

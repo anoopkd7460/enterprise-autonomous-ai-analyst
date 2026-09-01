@@ -49,6 +49,8 @@ class FakeAnalyticsResult:
         "Focus on Laptop."
     )
 
+    chart = None
+
 
 def fake_analyze_dataset(
     dataframe,
