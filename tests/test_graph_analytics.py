@@ -139,3 +139,57 @@ def test_analytics_route(monkeypatch):
     # ---------------------------------------------------------
 
     assert result["final_answer"]
+
+
+def test_uploaded_dataset_routes_business_question_to_analytics(
+    monkeypatch,
+):
+    """
+    When an uploaded dataset is available, a business
+    analytics question should be handled by the Analytics Agent
+    rather than the SQL Agent.
+    """
+
+    monkeypatch.setattr(
+        graph,
+        "analyze_dataset",
+        fake_analyze_dataset,
+    )
+
+    df = pd.DataFrame(
+        {
+            "product": [
+                "Laptop",
+                "Mobile",
+                "Laptop",
+                "Tablet",
+            ],
+            "revenue": [
+                1000,
+                500,
+                1500,
+                700,
+            ],
+        }
+    )
+
+    result = graph.planner_graph.invoke(
+        {
+            "question": "What is the total revenue?",
+            "route": "",
+            "dataframe": df,
+            "sql_result": None,
+            "doc_result": None,
+            "analytics_result": None,
+            "final_answer": "",
+        }
+    )
+
+    assert result["route"] == "analytics"
+
+    assert result["analytics_result"] is not None
+
+    assert (
+        "top_n_tool"
+        in result["analytics_result"]["analysis"]
+    )
