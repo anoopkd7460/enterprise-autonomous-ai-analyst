@@ -3,23 +3,31 @@ from typing import Callable
 import pandas as pd
 from langchain_core.tools import tool
 
-from app.analytics.analysis_tools import(
+from app.analytics.analysis_tools import (
     top_n,
     group_by_metric,
     summary_statistics,
     correlation_matrix,
+    trend_analysis,
 )
 
-def create_analytics_tools(df: pd.DataFrame,) -> list[Callable]:
+
+def create_analytics_tools(
+    df: pd.DataFrame,
+) -> list[Callable]:
     """
     Create LangChain tools bound to a specific DataFrame.
 
-    The LLM choose the operation and provides arguments.
+    The LLM chooses the operation and provides the arguments.
     The DataFrame itself is controlled by the application.
     """
 
     @tool
-    def top_n_tool(group_column: str, metric_column: str, n: int = 5,) -> list[dict]:
+    def top_n_tool(
+        group_column: str,
+        metric_column: str,
+        n: int = 5,
+    ) -> list[dict]:
         """
         Return the top N groups ranked by a numerical metric.
 
@@ -37,15 +45,27 @@ def create_analytics_tools(df: pd.DataFrame,) -> list[Callable]:
         """
 
         if n < 1:
-            raise ValueError("n must be greater than or equal to 1.")
+            raise ValueError(
+                "n must be greater than or equal to 1."
+            )
 
-        result = top_n(df, group_column, metric_column, n,)
+        result = top_n(
+            df,
+            group_column,
+            metric_column,
+            n,
+        )
 
-        return result.to_dict(orient="records")
-
+        return result.to_dict(
+            orient="records"
+        )
 
     @tool
-    def group_by_metric_tool(group_column: str, metric_column: str, ascending: bool = False,) -> list[dict]:
+    def group_by_metric_tool(
+        group_column: str,
+        metric_column: str,
+        ascending: bool = False,
+    ) -> list[dict]:
         """
         Aggregate a numerical metric by a categorical column.
 
@@ -61,13 +81,21 @@ def create_analytics_tools(df: pd.DataFrame,) -> list[Callable]:
             ascending: Whether to sort from lowest to highest.
         """
 
-        result = group_by_metric(df, group_column, metric_column, ascending,) 
+        result = group_by_metric(
+            df,
+            group_column,
+            metric_column,
+            ascending,
+        )
 
-        return result.to_dict(orient="records")
-
+        return result.to_dict(
+            orient="records"
+        )
 
     @tool
-    def summary_statistics_tool(column: str,) -> dict:
+    def summary_statistics_tool(
+        column: str,
+    ) -> dict:
         """
         Calculate descriptive statistics for a numerical column.
 
@@ -83,8 +111,11 @@ def create_analytics_tools(df: pd.DataFrame,) -> list[Callable]:
         Args:
             column: Numerical column to analyze.
         """
-        return summary_statistics(df, column,)
 
+        return summary_statistics(
+            df,
+            column,
+        )
 
     @tool
     def correlation_matrix_tool() -> dict:
@@ -97,6 +128,56 @@ def create_analytics_tools(df: pd.DataFrame,) -> list[Callable]:
         - variables moving together
         """
 
-        return correlation_matrix(df).to_dict()
+        return correlation_matrix(
+            df
+        ).to_dict()
 
-    return [top_n_tool, group_by_metric_tool, summary_statistics_tool, correlation_matrix_tool,]
+    @tool
+    def trend_analysis_tool(
+        period_column: str,
+        metric_column: str,
+        frequency: str = "month",
+    ) -> list[dict]:
+        """
+        Analyze how a numerical metric changes across time.
+
+        Use this when the user asks for:
+        - revenue trend
+        - sales trend
+        - monthly revenue
+        - quarterly sales
+        - yearly performance
+        - performance over time
+        - change in a metric over time
+
+        Args:
+            period_column:
+                Column containing dates or time periods.
+
+            metric_column:
+                Numerical column whose values should be
+                aggregated across time.
+
+            frequency:
+                Time aggregation level:
+                month, quarter, or year.
+        """
+
+        result = trend_analysis(
+            df,
+            period_column,
+            metric_column,
+            frequency,
+        )
+
+        return result.to_dict(
+            orient="records"
+        )
+
+    return [
+        top_n_tool,
+        group_by_metric_tool,
+        summary_statistics_tool,
+        correlation_matrix_tool,
+        trend_analysis_tool,
+    ]

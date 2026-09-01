@@ -1,3 +1,11 @@
+"""
+Data Analyst Agent.
+
+Uses an LLM to select deterministic analytics tools for an uploaded
+CSV/Excel dataset, executes the selected tools, and then uses the LLM
+to interpret the calculated evidence into a business-friendly answer.
+"""
+
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,15 +30,17 @@ analytics tools.
 Your workflow is:
 
 1. Understand the user's business question.
-2. Select the appropriate analytics tool.
-3. Use the tool to calculate the requested result.
-4. Interpret the calculated result.
+2. Select the appropriate analytics tool or tools.
+3. Use the selected tools to calculate the requested results.
+4. Interpret the calculated results.
 5. Provide a concise business explanation.
 
 Rules:
 
 - Always use an analytics tool when the question requires
   a calculation.
+- You may select multiple analytics tools when multiple
+  calculations are required.
 - Never invent numbers.
 - Never perform important numerical calculations yourself
   when a tool can calculate them.
@@ -56,48 +66,98 @@ Recommendation:
 
 @dataclass
 class DataAnalystResult:
+    """
+    Result returned by the Data Analyst Agent.
+    """
+
     question: str
     profile: dict[str, Any]
     analysis: dict[str, Any]
     answer: str
 
 
-def analyze_dataset(df: pd.DataFrame, question: str,) -> DataAnalystResult:
+def analyze_dataset(
+    df: pd.DataFrame,
+    question: str,
+) -> DataAnalystResult:
     """
     Analyze an uploaded dataset using LLM-driven tool selection.
 
     The LLM decides which analytics tools should be used.
-    Python/Pandas performs the deterministic calculation.
+    Python/Pandas performs the deterministic calculations.
+    The LLM then interprets the calculated evidence.
+
+    Args:
+        df: Uploaded Pandas DataFrame.
+        question: User's business question.
+
+    Returns:
+        DataAnalystResult containing:
+        - dataset profile
+        - deterministic analysis results
+        - final business answer
+
+    Raises:
+        ValueError:
+            If the dataset is empty or the question is empty.
     """
 
+    # ---------------------------------------------------------
+    # Validate input
+    # ---------------------------------------------------------
+
     if df.empty:
-        raise ValueError("Cannot analyze an empty dataset.")
+        raise ValueError(
+            "Cannot analyze an empty dataset."
+        )
 
     if not question or not question.strip():
-        raise ValueError("Analysis question cannot be empty.")
+        raise ValueError(
+            "Analysis question cannot be empty."
+        )
 
-    logger.info("Starting LLM-driven dataset analysis: rows=%d, columns=%d",
-                len(df),
-                len(df.columns),)
+    logger.info(
+        "Starting LLM-driven dataset analysis: rows=%d, columns=%d",
+        len(df),
+        len(df.columns),
+    )
 
-
-    # Profile Dataset
+    # ---------------------------------------------------------
+    # Profile dataset
+    # ---------------------------------------------------------
 
     profile = profile_dataset(df)
 
-    # Create tools bound to this dataset
+    logger.info(
+        "Dataset profiling completed."
+    )
+
+    # ---------------------------------------------------------
+    # Create tools bound to this specific dataset
+    # ---------------------------------------------------------
 
     tools = create_analytics_tools(df)
 
+    logger.info(
+        "Created %d analytics tools.",
+        len(tools),
+    )
+
+    # ---------------------------------------------------------
     # Create LangChain chat model
+    # ---------------------------------------------------------
 
     model = get_chat_model()
 
+    # ---------------------------------------------------------
     # Bind analytics tools to the LLM
+    # ---------------------------------------------------------
 
     model_with_tools = model.bind_tools(tools)
 
-    # Ask the LLM to determine the required tool
+    # ---------------------------------------------------------
+    # Ask LLM to determine required analytics tool(s)
+    # ---------------------------------------------------------
 
     response = model_with_tools.invoke(
         [
@@ -108,16 +168,20 @@ def analyze_dataset(df: pd.DataFrame, question: str,) -> DataAnalystResult:
             (
                 "user",
                 (
-                    f'Dataset columns:\n'
-                    f'{list(df.columns)}\n\n'
-                    f'User question:\n'
-                    f'{question}'
+                    f"Dataset columns:\n"
+                    f"{list(df.columns)}\n\n"
+                    f"Dataset profile:\n"
+                    f"{profile}\n\n"
+                    f"User question:\n"
+                    f"{question}"
                 ),
             ),
         ]
     )
 
+    # ---------------------------------------------------------
     # Inspect tool calls
+    # ---------------------------------------------------------
 
     tool_calls = getattr(
         response,
@@ -126,68 +190,102 @@ def analyze_dataset(df: pd.DataFrame, question: str,) -> DataAnalystResult:
     )
 
     if not tool_calls:
-        logger.warning("LLM did not select an analytics tool.")
+
+        logger.warning(
+            "LLM did not select an analytics tool."
+        )
 
         return DataAnalystResult(
             question=question,
             profile=profile,
             analysis={},
-            answer=response.content,
+            answer=str(response.content),
         )
 
-    # Execute selected tools
+    logger.info(
+        "LLM selected %d analytics tool(s).",
+        len(tool_calls),
+    )
+
+    # Execute ALL selected tools
 
     analysis: dict[str, Any] = {}
 
     for tool_call in tool_calls:
-        tool_name = tool_call['name']
-        tool_args = tool_call['args']
+
+        tool_name = tool_call["name"]
+        tool_args = tool_call["args"]
 
         logger.info(
-            "LLM selected tool: %s with args: %s",
+            "Executing analytics tool: %s with args: %s",
             tool_name,
             tool_args,
         )
 
         selected_tool = next(
             (
-                tool for tool in tools
+                tool
+                for tool in tools
                 if tool.name == tool_name
             ),
             None,
         )
 
         if selected_tool is None:
-            raise ValueError(f"Unknown analytics tool: {tool_name}")
+            raise ValueError(
+                f"Unknown analytics tool: {tool_name}"
+            )
 
-        result = selected_tool.invoke(tool_args)
+        try:
+
+            result = selected_tool.invoke(
+                tool_args
+            )
+
+        except Exception as exc:
+
+            logger.exception(
+                "Analytics tool failed: %s",
+                tool_name,
+            )
+
+            raise ValueError(
+                f"Analytics tool '{tool_name}' failed: {exc}"
+            ) from exc
 
         analysis[tool_name] = result
 
-        # Ask LLM to interpret deterministic results
-
-        interpretation_prompt = (
-            f'User question:\n'
-            f'{question}\n\n'
-            f'Dataset profile:\n'
-            f'{profile}\n\n'
-            f'Deterministically calculated results:\n'
-            f'{analysis}\n\n'
-            f'Interpret these results and provide the business answer.'
-        )
-
-        answer = chat(
-            ANALYST_SYSTEM_PROMPT,
-            interpretation_prompt,
-        )
-
         logger.info(
-            "LLM-driven dataset analysis completed successfully."
+            "Analytics tool completed successfully: %s",
+            tool_name,
         )
 
-        return DataAnalystResult(
-            question=question,
-            profile=profile,
-            analysis=analysis,
-            answer=answer,
-        )
+    # Interpret deterministic results
+
+    interpretation_prompt = (
+        f"User question:\n"
+        f"{question}\n\n"
+        f"Dataset profile:\n"
+        f"{profile}\n\n"
+        f"Deterministically calculated results:\n"
+        f"{analysis}\n\n"
+        "Interpret these results and provide the business answer."
+    )
+
+    answer = chat(
+        ANALYST_SYSTEM_PROMPT,
+        interpretation_prompt,
+    )
+
+    logger.info(
+        "LLM-driven dataset analysis completed successfully."
+    )
+
+    # Return complete result
+
+    return DataAnalystResult(
+        question=question,
+        profile=profile,
+        analysis=analysis,
+        answer=answer,
+    )

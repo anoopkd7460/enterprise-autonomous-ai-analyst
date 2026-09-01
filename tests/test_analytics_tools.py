@@ -118,3 +118,47 @@ def test_correlation_matrix_tool():
 
     assert "revenue" in result
     assert "units_sold" in result
+
+
+def test_trend_analysis_tool():
+
+    df = pd.DataFrame(
+        {
+            "date": [
+                "2024-01-01",
+                "2024-02-01",
+                "2024-03-01",
+                "2024-03-15",
+            ],
+            "revenue": [
+                1000,
+                1500,
+                2000,
+                500,
+            ],
+        }
+    )
+
+    tools = create_analytics_tools(df)
+
+    trend_tool = next(
+        tool
+        for tool in tools
+        if tool.name == "trend_analysis_tool"
+    )
+
+    result = trend_tool.invoke(
+        {
+            "period_column": "date",
+            "metric_column": "revenue",
+        }
+    )
+
+    assert result[0]["period"] == "2024-01"
+    assert result[0]["revenue"] == 1000
+
+    assert result[1]["period"] == "2024-02"
+    assert result[1]["revenue"] == 1500
+
+    assert result[2]["period"] == "2024-03"
+    assert result[2]["revenue"] == 2500
