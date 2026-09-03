@@ -3,11 +3,13 @@ FastAPI backend exposing the Planner Agent over HTTP.
 This lets any client (web, mobile, another service) call the agent
 without needing direct Python access to this codebase.
 """
+import json
 
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from plotly.utils import PlotlyJSONEncoder
 
 from app.analytics.data_loader import (
     SUPPORTED_EXTENSIONS,
@@ -140,7 +142,24 @@ def analyze(
             )
 
             if chart_figure is not None:
-                chart = chart_figure.to_dict()
+                try:
+                    # Convert Plotly/NumPy objects
+                    # into JSON-compatible Python objects.
+                    chart = json.loads(
+                        json.dumps(
+                            chart_figure.to_dict(),
+                            cls=PlotlyJSONEncoder,
+                        )
+                    )
+
+                except Exception as exc:
+                    logger.exception(
+                        "Failed to serialize chart: %s",
+                        exc,
+                    )
+
+                    chart = None
+
 
         return AnalyzeResponse(
             question=question,

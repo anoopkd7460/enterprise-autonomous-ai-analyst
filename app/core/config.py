@@ -1,8 +1,8 @@
 """
 Central configuration for the application.
 
-Reads configuration values from environment variables
-and the .env file.
+Configuration values are loaded from environment variables
+with sensible development defaults.
 """
 
 import os
@@ -14,11 +14,7 @@ load_dotenv()
 
 
 class Settings:
-    """Application configuration."""
-
-    # ---------------------------------------------------------
     # LLM
-    # ---------------------------------------------------------
 
     OPENAI_API_KEY: str = os.getenv(
         "GROQ_API_KEY",
@@ -30,18 +26,15 @@ class Settings:
         "openai/gpt-oss-20b",
     )
 
-    # ---------------------------------------------------------
     # Database
-    # ---------------------------------------------------------
 
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "sqlite:///./data/sample/sales.db",
     )
 
-    # ---------------------------------------------------------
+
     # Redis
-    # ---------------------------------------------------------
 
     REDIS_ENABLED: bool = (
         os.getenv(
@@ -66,21 +59,18 @@ class Settings:
     REDIS_CONNECT_TIMEOUT: float = float(
         os.getenv(
             "REDIS_CONNECT_TIMEOUT",
-            "0.2",
+            "1.0",
         )
     )
 
     REDIS_SOCKET_TIMEOUT: float = float(
         os.getenv(
             "REDIS_SOCKET_TIMEOUT",
-            "0.2",
+            "1.0",
         )
     )
 
-    # ---------------------------------------------------------
     # Application
-    # ---------------------------------------------------------
-
     APP_ENV: str = os.getenv(
         "APP_ENV",
         "development",

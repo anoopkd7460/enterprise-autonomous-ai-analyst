@@ -1,0 +1,36 @@
+services:
+
+  api:
+    build: .
+    container_name: autonomous-ai-analyst-api
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      APP_ENV: production
+
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_CONNECT_TIMEOUT: "1.0"
+      REDIS_SOCKET_TIMEOUT: "1.0"
+
+    env_file:
+      - .env
+
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: autonomous-ai-analyst-redis
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
