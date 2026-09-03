@@ -71,11 +71,10 @@ def analyze(
         )
 
         dataframe = None
+        dataset_metadata = None
 
-        # -------------------------------------------------
         # Optional dataset processing
-        # -------------------------------------------------
-
+    
         if file is not None:
 
             filename = file.filename or ""
@@ -119,9 +118,16 @@ def analyze(
                 len(dataframe.columns),
             )
 
-        # -------------------------------------------------
+            dataset_metadata = {
+                "filename": filename,
+                "rows": len(dataframe),
+                "columns": len(dataframe.columns),
+                "numeric_columns": len(
+                    dataframe.select_dtypes(include="number").columns
+                ),
+                "missing_values": int(dataframe.isna().sum().sum()),
+            }
         # Run existing AI workflow
-        # -------------------------------------------------
 
         result = analyze_with_details(
             question,
@@ -165,6 +171,7 @@ def analyze(
             question=question,
             answer=answer,
             chart=chart,
+            dataset_metadata=dataset_metadata,
         )
 
     except HTTPException:
