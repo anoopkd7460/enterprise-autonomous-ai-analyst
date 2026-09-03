@@ -33,7 +33,6 @@ class Settings:
         "sqlite:///./data/sample/sales.db",
     )
 
-
     # Redis
 
     REDIS_ENABLED: bool = (
@@ -56,6 +55,19 @@ class Settings:
         )
     )
 
+    REDIS_PASSWORD: str = os.getenv(
+        "REDIS_PASSWORD",
+        "",
+    )
+
+    REDIS_SSL: bool = (
+        os.getenv(
+            "REDIS_SSL",
+            "false",
+        ).lower()
+        == "true"
+    )
+
     REDIS_CONNECT_TIMEOUT: float = float(
         os.getenv(
             "REDIS_CONNECT_TIMEOUT",
@@ -71,6 +83,7 @@ class Settings:
     )
 
     # Application
+
     APP_ENV: str = os.getenv(
         "APP_ENV",
         "development",

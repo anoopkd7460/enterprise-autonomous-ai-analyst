@@ -26,7 +26,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-CACHE_TTL_SECONDS = 60 * 60  # 1 hour
+CACHE_TTL_SECONDS = 60 * 60
 
 redis_client = None
 REDIS_AVAILABLE = None
@@ -36,8 +36,6 @@ def _get_redis_client():
     """
     Lazily create and validate the Redis connection.
 
-    Redis is only contacted when caching is enabled.
-
     Returns:
         Redis client if available.
         None if Redis is disabled or unavailable.
@@ -46,39 +44,22 @@ def _get_redis_client():
     global redis_client
     global REDIS_AVAILABLE
 
-    # ---------------------------------------------------------
-    # Redis explicitly disabled
-    # ---------------------------------------------------------
-
     if not settings.REDIS_ENABLED:
-
         REDIS_AVAILABLE = False
-
         return None
-
-    # ---------------------------------------------------------
-    # Redis already initialized successfully
-    # ---------------------------------------------------------
 
     if REDIS_AVAILABLE is True:
         return redis_client
 
-    # ---------------------------------------------------------
-    # Redis already determined to be unavailable
-    # ---------------------------------------------------------
-
     if REDIS_AVAILABLE is False:
         return None
 
-    # ---------------------------------------------------------
-    # First Redis access
-    # ---------------------------------------------------------
-
     try:
-
         client = redis.Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
+            password=settings.REDIS_PASSWORD or None,
+            ssl=settings.REDIS_SSL,
             decode_responses=True,
             socket_connect_timeout=(
                 settings.REDIS_CONNECT_TIMEOUT
@@ -100,7 +81,6 @@ def _get_redis_client():
         return redis_client
 
     except Exception as exc:
-
         REDIS_AVAILABLE = False
 
         logger.warning(
@@ -117,9 +97,6 @@ def _dataset_hash(
     """
     Generate a deterministic fingerprint for a Pandas DataFrame.
 
-    The fingerprint changes when dataset content, columns,
-    or data types change.
-
     Returns:
         SHA-256 dataset fingerprint, or None when no valid
         DataFrame is provided.
@@ -129,20 +106,17 @@ def _dataset_hash(
         return None
 
     try:
-
         if not isinstance(
             dataframe,
             pd.DataFrame,
         ):
             return None
 
-        # Hash DataFrame values and index.
         row_hash = pd.util.hash_pandas_object(
             dataframe,
             index=True,
         )
 
-        # Include column names and data types.
         metadata = (
             str(list(dataframe.columns))
             + str(
@@ -162,7 +136,6 @@ def _dataset_hash(
         ).hexdigest()
 
     except Exception as exc:
-
         logger.warning(
             "Could not generate dataset fingerprint: %s",
             exc,
@@ -177,11 +150,6 @@ def _cache_key(
 ) -> str:
     """
     Generate a deterministic cache key.
-
-    The question is always part of the key.
-
-    When a dataset is provided, its fingerprint is also
-    included so that answers are isolated per dataset.
     """
 
     normalized_question = (
@@ -219,11 +187,9 @@ def get_cached_answer(
     client = _get_redis_client()
 
     if client is None:
-
         return None
 
     try:
-
         dataset_hash = _dataset_hash(
             dataframe
         )
@@ -236,7 +202,6 @@ def get_cached_answer(
         )
 
         if cached:
-
             logger.info(
                 "Cache hit - returning cached answer."
             )
@@ -250,7 +215,6 @@ def get_cached_answer(
         )
 
     except Exception as exc:
-
         logger.warning(
             "Cache read failed: %s",
             exc,
@@ -277,7 +241,6 @@ def set_cached_answer(
         return
 
     try:
-
         dataset_hash = _dataset_hash(
             dataframe
         )
@@ -300,7 +263,6 @@ def set_cached_answer(
         )
 
     except Exception as exc:
-
         logger.warning(
             "Cache write failed: %s",
             exc,
