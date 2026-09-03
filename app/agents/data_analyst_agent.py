@@ -51,6 +51,10 @@ Rules:
 - If the available dataset cannot answer the question,
   explain why.
 - Provide one actionable recommendation.
+- Base the recommendation only on the calculated evidence.
+- Never claim that a product is high-margin unless margin was calculated.
+- Never claim that a product or category is growing unless a time-based trend was calculated.
+- Never invent budget percentages, growth rates, margins, targets, or comparisons.
 - Avoid unnecessary technical terminology.
 
 Return:
@@ -311,7 +315,23 @@ def analyze_dataset(
         f"{profile}\n\n"
         f"Deterministically calculated results:\n"
         f"{analysis}\n\n"
-        "Interpret these results and provide the business answer."
+        "Using ONLY the deterministically calculated results above, "
+        "provide the final business answer.\n\n"
+        "You MUST follow this exact structure:\n\n"
+        "Key Insight:\n"
+        "<direct answer to the user's question>\n\n"
+        "Evidence:\n"
+        "<include the relevant calculated values from the analysis>\n\n"
+        "Recommendation:\n"
+        "<one actionable recommendation based only on the evidence>\n\n"
+        "Rules:\n"
+        "- Never invent numbers.\n"
+        "- Do not omit the requested result.\n"
+        "- For ranking questions such as top N, list the requested "
+        "items and their calculated values.\n"
+        "- Use the exact values returned by the analytics tools.\n"
+        "- Do not introduce unsupported percentages, budgets, growth "
+        "rates, or comparisons.\n"
     )
 
     try:

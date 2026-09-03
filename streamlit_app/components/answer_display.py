@@ -12,45 +12,23 @@ def _extract_section(
     section_name: str,
     next_sections: list[str],
 ) -> str:
-    """
-    Extract a section from the analyst response.
+    """Extract a named section from the analyst response."""
 
-    Supports headings such as:
+    if next_sections:
+        next_pattern = "|".join(
+            re.escape(section)
+            for section in next_sections
+        )
 
-    Key Insight
-    Key Insight:
-    **Key Insight**
-    **Key Insight:**
-    """
-
-    next_pattern = "|".join(
-        re.escape(section)
-        for section in next_sections
-    )
+        end_pattern = (
+            rf"(?=\n\s*\**(?:{next_pattern}):?\**\s*\n|\Z)"
+        )
+    else:
+        end_pattern = r"(?=\Z)"
 
     pattern = (
         rf"(?:^|\n)\s*\**{re.escape(section_name)}:?\**\s*\n"
-        rf"(.*?)(?=\n\s*\**(?:{next_pattern}):?\**\s*\n|\Z)"
-    )
-
-    match = re.search(
-        pattern,
-        answer,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-
-    if not match:
-        return ""
-
-    return match.group(1).strip()
-
-
-def _extract_evidence(answer: str) -> str:
-    """Extract the Evidence section."""
-
-    pattern = (
-        r"(?:^|\n)\s*\**Evidence:?\**\s*\n"
-        r"(.*?)(?=\n\s*\**Recommendation:?\**\s*\n|\Z)"
+        rf"(.*?){end_pattern}"
     )
 
     match = re.search(
@@ -66,7 +44,7 @@ def _extract_evidence(answer: str) -> str:
 
 
 def render_answer(answer: str | None) -> None:
-    """Render the analyst response as structured business insights."""
+    """Render the structured AI analyst response."""
 
     if not answer:
         st.info("No answer available.")
@@ -80,7 +58,17 @@ def render_answer(answer: str | None) -> None:
         ["Evidence", "Recommendation"],
     )
 
-    evidence = _extract_evidence(answer)
+    evidence = _extract_section(
+        answer,
+        "Evidence",
+        ["Recommendation"],
+    )
+
+    answer_section = _extract_section(
+        answer,
+        "Answer",
+        ["Recommendation"],
+    )
 
     recommendation = _extract_section(
         answer,
@@ -88,15 +76,11 @@ def render_answer(answer: str | None) -> None:
         [],
     )
 
-    # Key Insight
-
     if key_insight:
         st.markdown("### 💡 Key Insight")
 
         with st.container(border=True):
             st.markdown(key_insight)
-
-    # Evidence
 
     if evidence:
         st.markdown("### 📋 Evidence")
@@ -104,7 +88,11 @@ def render_answer(answer: str | None) -> None:
         with st.container(border=True):
             st.markdown(evidence)
 
-    # Recommendation
+    if answer_section:
+        st.markdown("### 📊 Analysis Result")
+
+        with st.container(border=True):
+            st.markdown(answer_section)
 
     if recommendation:
         st.markdown("### 🎯 Recommendation")
@@ -112,8 +100,13 @@ def render_answer(answer: str | None) -> None:
         with st.container(border=True):
             st.markdown(recommendation)
 
-    # Fallback
-    
-    if not key_insight and not evidence and not recommendation:
+    if (
+        not key_insight
+        and not evidence
+        and not answer_section
+        and not recommendation
+    ):
+        st.markdown("### 🤖 Analyst Response")
+
         with st.container(border=True):
             st.markdown(answer)

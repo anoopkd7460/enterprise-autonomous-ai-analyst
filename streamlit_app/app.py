@@ -62,11 +62,6 @@ def main() -> None:
         st.warning("Please enter a business question.")
         return
 
-    if uploaded_file is None:
-        st.warning("Please upload a dataset.")
-        return
-
-
     with st.spinner("🤖 AI Analyst is analyzing your request..."):
 
         try:
