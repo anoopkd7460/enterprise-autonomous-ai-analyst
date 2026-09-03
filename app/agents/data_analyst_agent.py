@@ -13,6 +13,7 @@ import pandas as pd
 
 from app.analytics.chart_generator import create_bar_chart, create_line_chart
 from app.analytics.profiler import profile_dataset
+from app.core.exceptions import AIServiceError
 from app.llm.client import chat
 from app.llm.langchain_client import get_chat_model
 from app.tools.analytics_tools import create_analytics_tools
@@ -67,9 +68,7 @@ Recommendation:
 
 @dataclass
 class DataAnalystResult:
-    """
-    Result returned by the Data Analyst Agent.
-    """
+    """Result returned by the Data Analyst Agent."""
 
     question: str
     profile: dict[str, Any]
@@ -97,7 +96,6 @@ def _create_visualization(
             return None
 
         chart_df = pd.DataFrame(result)
-
         columns = list(chart_df.columns)
 
         if len(columns) < 2:
@@ -115,12 +113,11 @@ def _create_visualization(
             return None
 
         chart_df = pd.DataFrame(result)
-
         columns = list(chart_df.columns)
 
         if len(columns) < 2:
             return None
-        
+
         return create_line_chart(
             chart_df,
             columns[0],
@@ -129,7 +126,6 @@ def _create_visualization(
         )
 
     return None
-
 
 
 def analyze_dataset(
@@ -156,11 +152,10 @@ def analyze_dataset(
     Raises:
         ValueError:
             If the dataset is empty or the question is empty.
-    """
 
-    # ---------------------------------------------------------
-    # Validate input
-    # ---------------------------------------------------------
+        AIServiceError:
+            If an LLM request fails.
+    """
 
     if df.empty:
         raise ValueError(
@@ -178,19 +173,11 @@ def analyze_dataset(
         len(df.columns),
     )
 
-    # ---------------------------------------------------------
-    # Profile dataset
-    # ---------------------------------------------------------
-
     profile = profile_dataset(df)
 
     logger.info(
         "Dataset profiling completed."
     )
-
-    # ---------------------------------------------------------
-    # Create tools bound to this specific dataset
-    # ---------------------------------------------------------
 
     tools = create_analytics_tools(df)
 
@@ -199,45 +186,44 @@ def analyze_dataset(
         len(tools),
     )
 
-    # ---------------------------------------------------------
-    # Create LangChain chat model
-    # ---------------------------------------------------------
+    try:
+        model = get_chat_model()
+        model_with_tools = model.bind_tools(tools)
+    except Exception as exc:
+        logger.exception(
+            "Failed to initialize LLM analytics model."
+        )
+        raise AIServiceError(
+            "The AI service is temporarily unavailable."
+        ) from exc
 
-    model = get_chat_model()
-
-    # ---------------------------------------------------------
-    # Bind analytics tools to the LLM
-    # ---------------------------------------------------------
-
-    model_with_tools = model.bind_tools(tools)
-
-    # ---------------------------------------------------------
-    # Ask LLM to determine required analytics tool(s)
-    # ---------------------------------------------------------
-
-    response = model_with_tools.invoke(
-        [
-            (
-                "system",
-                ANALYST_SYSTEM_PROMPT,
-            ),
-            (
-                "user",
+    try:
+        response = model_with_tools.invoke(
+            [
                 (
-                    f"Dataset columns:\n"
-                    f"{list(df.columns)}\n\n"
-                    f"Dataset profile:\n"
-                    f"{profile}\n\n"
-                    f"User question:\n"
-                    f"{question}"
+                    "system",
+                    ANALYST_SYSTEM_PROMPT,
                 ),
-            ),
-        ]
-    )
-
-    # ---------------------------------------------------------
-    # Inspect tool calls
-    # ---------------------------------------------------------
+                (
+                    "user",
+                    (
+                        f"Dataset columns:\n"
+                        f"{list(df.columns)}\n\n"
+                        f"Dataset profile:\n"
+                        f"{profile}\n\n"
+                        f"User question:\n"
+                        f"{question}"
+                    ),
+                ),
+            ]
+        )
+    except Exception as exc:
+        logger.exception(
+            "LLM tool-selection request failed."
+        )
+        raise AIServiceError(
+            "The AI service is temporarily unavailable."
+        ) from exc
 
     tool_calls = getattr(
         response,
@@ -246,7 +232,6 @@ def analyze_dataset(
     )
 
     if not tool_calls:
-
         logger.warning(
             "LLM did not select an analytics tool."
         )
@@ -263,12 +248,10 @@ def analyze_dataset(
         len(tool_calls),
     )
 
-    # Execute ALL selected tools
-
     analysis: dict[str, Any] = {}
+    chart = None
 
     for tool_call in tool_calls:
-
         tool_name = tool_call["name"]
         tool_args = tool_call["args"]
 
@@ -293,13 +276,10 @@ def analyze_dataset(
             )
 
         try:
-
             result = selected_tool.invoke(
                 tool_args
             )
-
         except Exception as exc:
-
             logger.exception(
                 "Analytics tool failed: %s",
                 tool_name,
@@ -311,17 +291,18 @@ def analyze_dataset(
 
         analysis[tool_name] = result
 
-        chart = _create_visualization(
+        visualization = _create_visualization(
             tool_name,
             result,
         )
+
+        if visualization is not None:
+            chart = visualization
 
         logger.info(
             "Analytics tool completed successfully: %s",
             tool_name,
         )
-
-    # Interpret deterministic results
 
     interpretation_prompt = (
         f"User question:\n"
@@ -333,16 +314,22 @@ def analyze_dataset(
         "Interpret these results and provide the business answer."
     )
 
-    answer = chat(
-        ANALYST_SYSTEM_PROMPT,
-        interpretation_prompt,
-    )
+    try:
+        answer = chat(
+            ANALYST_SYSTEM_PROMPT,
+            interpretation_prompt,
+        )
+    except Exception as exc:
+        logger.exception(
+            "LLM interpretation request failed."
+        )
+        raise AIServiceError(
+            "The AI service is temporarily unavailable."
+        ) from exc
 
     logger.info(
         "LLM-driven dataset analysis completed successfully."
     )
-
-    # Return complete result
 
     return DataAnalystResult(
         question=question,

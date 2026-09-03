@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 
 import pandas as pd
 
@@ -147,3 +148,37 @@ def test_dataset_hash_none_without_dataset():
     result = cache_service._dataset_hash(None)
 
     assert result is None
+
+def test_get_cached_answer_when_redis_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        cache_service,
+        "_get_redis_client",
+        lambda: None,
+    )
+
+    result = cache_service.get_cached_answer(
+        "What are the top products?"
+    )
+
+    assert result is None
+
+
+def test_set_cached_answer_when_redis_write_fails(monkeypatch):
+    fake_client = Mock()
+
+    fake_client.setex.side_effect = RuntimeError(
+        "Redis connection lost"
+    )
+
+    monkeypatch.setattr(
+        cache_service,
+        "_get_redis_client",
+        lambda: fake_client,
+    )
+
+    cache_service.set_cached_answer(
+        "What are the top products?",
+        "Laptop generated the highest revenue.",
+    )
+
+    fake_client.setex.assert_called_once()

@@ -77,7 +77,35 @@ def main() -> None:
             )
 
         except APIClientError as exc:
-            st.error(str(exc))
+
+            if exc.status_code == 400:
+                st.error(
+                    f"⚠️ Request error: {exc.message}"
+                )
+
+            elif exc.status_code == 503:
+                st.error(
+                    "🤖 The AI service is temporarily unavailable. "
+                    "Please try again later."
+                )
+
+            elif exc.status_code == 504:
+                st.error(
+                    "⏱️ The analysis request timed out. "
+                    "Please try again."
+                )
+
+            elif exc.status_code == 500:
+                st.error(
+                    "⚠️ The server encountered an unexpected error. "
+                    "Please try again later."
+                )
+
+            else:
+                st.error(
+                    f"⚠️ {exc.message}"
+                )
+
             return
 
     st.success("Analysis completed successfully.")

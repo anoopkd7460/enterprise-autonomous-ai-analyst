@@ -1,8 +1,10 @@
 """
 FastAPI backend exposing the Planner Agent over HTTP.
-This lets any client (web, mobile, another service) call the agent
-without needing direct Python access to this codebase.
+
+This lets any client (web, mobile, another service) call the
+agent without needing direct Python access to this codebase.
 """
+
 import json
 
 from pathlib import Path
@@ -18,6 +20,10 @@ from app.analytics.data_loader import (
 from app.api.schemas import (
     AnalyzeResponse,
     HealthResponse,
+)
+from app.core.exceptions import (
+    AIServiceError,
+    AnalysisTimeoutError,
 )
 from app.utils.logger import get_logger
 from app.workflows.graph import analyze_with_details
@@ -64,7 +70,6 @@ def analyze(
     temporary_file = None
 
     try:
-
         logger.info(
             "Received analysis request: %s",
             question,
@@ -74,11 +79,9 @@ def analyze(
         dataset_metadata = None
 
         # Optional dataset processing
-    
+
         if file is not None:
-
             filename = file.filename or ""
-
             extension = Path(filename).suffix.lower()
 
             if extension not in SUPPORTED_EXTENSIONS:
@@ -96,8 +99,6 @@ def analyze(
                 filename,
             )
 
-            # Save upload temporarily so the existing
-            # data_loader can process it.
             temporary_file = NamedTemporaryFile(
                 delete=False,
                 suffix=extension,
@@ -123,11 +124,16 @@ def analyze(
                 "rows": len(dataframe),
                 "columns": len(dataframe.columns),
                 "numeric_columns": len(
-                    dataframe.select_dtypes(include="number").columns
+                    dataframe.select_dtypes(
+                        include="number"
+                    ).columns
                 ),
-                "missing_values": int(dataframe.isna().sum().sum()),
+                "missing_values": int(
+                    dataframe.isna().sum().sum()
+                ),
             }
-        # Run existing AI workflow
+
+        # Run AI workflow
 
         result = analyze_with_details(
             question,
@@ -135,6 +141,8 @@ def analyze(
         )
 
         answer = result["final_answer"]
+
+        # Serialize optional chart
 
         chart = None
 
@@ -149,8 +157,6 @@ def analyze(
 
             if chart_figure is not None:
                 try:
-                    # Convert Plotly/NumPy objects
-                    # into JSON-compatible Python objects.
                     chart = json.loads(
                         json.dumps(
                             chart_figure.to_dict(),
@@ -164,8 +170,9 @@ def analyze(
                         exc,
                     )
 
+                    # Chart failure should not make the
+                    # entire analysis request fail.
                     chart = None
-
 
         return AnalyzeResponse(
             question=question,
@@ -174,11 +181,14 @@ def analyze(
             dataset_metadata=dataset_metadata,
         )
 
+    # Expected HTTP errors
+
     except HTTPException:
         raise
 
-    except FileNotFoundError as exc:
+    # Dataset/file errors
 
+    except FileNotFoundError as exc:
         logger.exception(
             "Uploaded dataset could not be found."
         )
@@ -189,7 +199,6 @@ def analyze(
         ) from exc
 
     except ValueError as exc:
-
         logger.exception(
             "Invalid dataset."
         )
@@ -199,12 +208,44 @@ def analyze(
             detail=str(exc),
         ) from exc
 
-    except Exception as exc:
+    # AI service failures
 
+    except AIServiceError as exc:
+        logger.exception(
+            "AI service failure."
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The AI service is temporarily unavailable. "
+                "Please try again later."
+            ),
+        ) from exc
+
+    # Analysis timeout
+
+    except AnalysisTimeoutError as exc:
+        logger.exception(
+            "Analysis timed out."
+        )
+
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "The analysis request timed out. "
+                "Please try again."
+            ),
+        ) from exc
+
+    # Unexpected application failure
+
+    except Exception as exc:
         logger.exception(
             "Analysis request failed."
         )
 
+        # Do not expose internal exception details to clients.
         raise HTTPException(
             status_code=500,
             detail=(
@@ -213,10 +254,9 @@ def analyze(
         ) from exc
 
     finally:
+        # Temporary file cleanup
 
-        # Clean up temporary file.
         if temporary_file is not None:
-
             try:
                 Path(
                     temporary_file.name
@@ -225,7 +265,6 @@ def analyze(
                 )
 
             except Exception:
-
                 logger.warning(
                     "Failed to remove temporary file: %s",
                     temporary_file.name,

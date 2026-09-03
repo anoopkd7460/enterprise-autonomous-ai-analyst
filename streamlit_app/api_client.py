@@ -5,7 +5,7 @@ The Streamlit application uses this module instead of
 making HTTP requests directly from UI components.
 """
 
-from typing import BinaryIO, Any
+from typing import Any, BinaryIO
 
 import requests
 
@@ -14,7 +14,24 @@ DEFAULT_API_URL = "http://localhost:8000"
 
 
 class APIClientError(Exception):
-    """Raised when the FastAPI backend cannot process a request."""
+    """
+    Raised when the FastAPI backend cannot process a request.
+
+    Attributes:
+        message: User-facing error message.
+        status_code: HTTP status code returned by the backend,
+            if available.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+    ) -> None:
+        self.message = message
+        self.status_code = status_code
+
+        super().__init__(message)
 
 
 def analyze(
@@ -40,8 +57,8 @@ def analyze(
 
     Raises:
         APIClientError:
-            If the backend returns an HTTP error or
-            an unexpected response.
+            If the backend returns an HTTP error,
+            cannot be reached, or returns invalid JSON.
     """
 
     url = f"{api_url.rstrip('/')}/api/v1/analyze"
@@ -61,7 +78,6 @@ def analyze(
         }
 
     try:
-
         response = requests.post(
             url,
             data=data,
@@ -69,14 +85,19 @@ def analyze(
             timeout=120,
         )
 
-    except requests.RequestException as exc:
+    except requests.Timeout as exc:
+        raise APIClientError(
+            "The analysis request timed out. "
+            "Please try again.",
+            status_code=504,
+        ) from exc
 
+    except requests.RequestException as exc:
         raise APIClientError(
             f"Unable to connect to the analyst API: {exc}"
         ) from exc
 
     if not response.ok:
-
         try:
             detail = response.json().get(
                 "detail",
@@ -87,21 +108,20 @@ def analyze(
             detail = response.text
 
         raise APIClientError(
-            f"API request failed "
-            f"(HTTP {response.status_code}): {detail}"
+            str(detail),
+            status_code=response.status_code,
         )
 
     try:
-
         result = response.json()
 
     except ValueError as exc:
-
         raise APIClientError(
             "The analyst API returned an invalid JSON response."
         ) from exc
 
     return result
+
 
 def health_check(
     api_url: str = DEFAULT_API_URL,
@@ -109,10 +129,17 @@ def health_check(
     """
     Check whether the FastAPI backend is healthy.
 
-    Returns
-    -------
-    dict[str, Any]
-        Health response from the backend.
+    Args:
+        api_url:
+            Base URL of the FastAPI backend.
+
+    Returns:
+        Parsed health response from the backend.
+
+    Raises:
+        APIClientError:
+            If the backend cannot be reached,
+            returns an HTTP error, or returns invalid JSON.
     """
 
     url = f"{api_url.rstrip('/')}/api/v1/health"
@@ -122,6 +149,13 @@ def health_check(
             url,
             timeout=5,
         )
+
+    except requests.Timeout as exc:
+        raise APIClientError(
+            "The backend health check timed out.",
+            status_code=504,
+        ) from exc
+
     except requests.RequestException as exc:
         raise APIClientError(
             f"Unable to connect to the analyst API: {exc}"
@@ -129,12 +163,15 @@ def health_check(
 
     if not response.ok:
         raise APIClientError(
-            f"Health check failed (HTTP {response.status_code})."
+            f"Health check failed (HTTP {response.status_code}).",
+            status_code=response.status_code,
         )
 
     try:
         return response.json()
+
     except ValueError as exc:
         raise APIClientError(
-            "The analyst API returned invalid health-check JSON."
+            "The analyst API returned invalid "
+            "health-check JSON."
         ) from exc

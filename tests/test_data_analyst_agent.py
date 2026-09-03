@@ -1,6 +1,8 @@
 import pandas as pd
+import pytest
 
 from app.agents import data_analyst_agent
+from app.core.exceptions import AIServiceError
 
 
 def sample_dataframe():
@@ -282,3 +284,27 @@ def test_visualization_created_for_trend(monkeypatch):
     )
 
     assert result.chart is not None
+
+def test_data_analyst_agent_llm_failure(monkeypatch):
+
+    class FailingModel:
+
+        def bind_tools(self, tools):
+            return self
+
+        def invoke(self, messages):
+            raise RuntimeError("Groq service unavailable")
+
+    monkeypatch.setattr(
+        data_analyst_agent,
+        "get_chat_model",
+        lambda: FailingModel(),
+    )
+
+    df = sample_dataframe()
+
+    with pytest.raises(AIServiceError):
+        data_analyst_agent.analyze_dataset(
+            df,
+            "What are the top products by revenue?",
+        )

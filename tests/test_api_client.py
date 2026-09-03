@@ -8,7 +8,6 @@ from streamlit_app.api_client import (
 
 
 class FakeResponse:
-
     def __init__(
         self,
         status_code=200,
@@ -90,7 +89,6 @@ def test_analyze_connection_error(monkeypatch):
     )
 
     try:
-
         analyze(
             "What are the top products?"
         )
@@ -100,7 +98,6 @@ def test_analyze_connection_error(monkeypatch):
         )
 
     except APIClientError as exc:
-
         assert "Unable to connect" in str(exc)
 
 
@@ -125,7 +122,6 @@ def test_analyze_http_error(monkeypatch):
     )
 
     try:
-
         analyze(
             "What are the top products?"
         )
@@ -135,9 +131,8 @@ def test_analyze_http_error(monkeypatch):
         )
 
     except APIClientError as exc:
-
-        assert "HTTP 400" in str(exc)
-        assert "Unsupported file type" in str(exc)
+        assert exc.status_code == 400
+        assert "Unsupported file type" in exc.message
 
 
 def test_analyze_with_file(monkeypatch):
@@ -150,7 +145,6 @@ def test_analyze_with_file(monkeypatch):
         files,
         timeout,
     ):
-
         captured["files"] = files
 
         return FakeResponse(
@@ -186,20 +180,23 @@ def test_analyze_with_file(monkeypatch):
 
     assert captured["files"] is not None
 
+
 def test_health_check_success(monkeypatch):
     """Verify successful API health check."""
 
-    class FakeResponse:
+    class FakeHealthResponse:
         ok = True
 
         def json(self):
             return {
                 "status": "healthy",
-                "service": "enterprise-autonomous-ai-analyst",
+                "service": (
+                    "enterprise-autonomous-ai-analyst"
+                ),
             }
 
     def fake_get(*args, **kwargs):
-        return FakeResponse()
+        return FakeHealthResponse()
 
     monkeypatch.setattr(
         "streamlit_app.api_client.requests.get",
@@ -211,7 +208,68 @@ def test_health_check_success(monkeypatch):
     )
 
     assert result["status"] == "healthy"
-    assert (
-        result["service"]
-        == "enterprise-autonomous-ai-analyst"
+    assert result["service"] == (
+        "enterprise-autonomous-ai-analyst"
     )
+
+
+def test_analyze_http_503(monkeypatch):
+    """Verify that HTTP 503 is exposed through APIClientError."""
+
+    def fake_post(*args, **kwargs):
+        return FakeResponse(
+            status_code=503,
+            payload={
+                "detail": (
+                    "The AI service is temporarily unavailable. "
+                    "Please try again later."
+                )
+            },
+        )
+
+    monkeypatch.setattr(
+        requests,
+        "post",
+        fake_post,
+    )
+
+    try:
+        analyze(
+            "What are the top products?"
+        )
+
+        assert False, (
+            "Expected APIClientError"
+        )
+
+    except APIClientError as exc:
+        assert exc.status_code == 503
+        assert "AI service" in exc.message
+
+
+def test_analyze_timeout(monkeypatch):
+    """Verify that request timeout becomes a 504-style client error."""
+
+    def fake_post(*args, **kwargs):
+        raise requests.Timeout(
+            "Request timed out"
+        )
+
+    monkeypatch.setattr(
+        requests,
+        "post",
+        fake_post,
+    )
+
+    try:
+        analyze(
+            "What are the top products?"
+        )
+
+        assert False, (
+            "Expected APIClientError"
+        )
+
+    except APIClientError as exc:
+        assert exc.status_code == 504
+        assert "timed out" in exc.message
