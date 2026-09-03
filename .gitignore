@@ -19,6 +19,7 @@ env/
 data/raw/*
 data/processed/*
 data/sample/*.db
+!data/sample/sales.db
 
 # Logs
 logs/*
