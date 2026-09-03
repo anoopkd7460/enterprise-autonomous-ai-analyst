@@ -4,10 +4,7 @@ Sidebar component for the Streamlit application.
 
 import streamlit as st
 
-from streamlit_app.api_client import (
-    APIClientError,
-    health_check,
-)
+from api_client import APIClientError, health_check
 
 
 def render_sidebar(api_url: str) -> None:

@@ -4,16 +4,14 @@ Main Streamlit application for the Enterprise Autonomous AI Analyst.
 
 import streamlit as st
 
-from streamlit_app.components.sidebar import render_sidebar
-from streamlit_app.api_client import APIClientError, analyze
-from streamlit_app.components.answer_display import render_answer
-from streamlit_app.components.chart_display import render_chart
-from streamlit_app.components.question_input import (
-    render_question_input,
-)
-from streamlit_app.components.dataset_summary import (render_dataset_summary,)
-from streamlit_app.components.upload import render_upload
-from streamlit_app.utils.config import get_api_url
+from components.sidebar import render_sidebar
+from api_client import APIClientError, analyze
+from components.answer_display import render_answer
+from components.chart_display import render_chart
+from components.question_input import render_question_input
+from components.dataset_summary import render_dataset_summary
+from components.upload import render_upload
+from utils.config import get_api_url
 
 
 st.set_page_config(
