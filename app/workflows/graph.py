@@ -498,36 +498,19 @@ def build_graph():
 
     graph = StateGraph(PlannerState)
 
-    graph.add_node(
-        "router",
-        route_question,
-    )
+    graph.add_node("router",route_question,)
 
-    graph.add_node(
-        "sql_agent",
-        call_sql_agent,
-    )
+    graph.add_node("sql_agent",call_sql_agent,)
 
-    graph.add_node(
-        "document_agent",
-        call_document_agent,
-    )
+    graph.add_node("document_agent",call_document_agent,)
 
-    graph.add_node(
-        "data_analyst",
-        call_data_analyst,
-    )
+    graph.add_node("data_analyst",call_data_analyst,)
 
-    graph.add_node(
-        "combine",
-        combine_answers,
-    )
+    graph.add_node("combine",combine_answers,)
 
     graph.set_entry_point("router")
 
-    graph.add_conditional_edges(
-        "router",
-        decide_next,
+    graph.add_conditional_edges("router",decide_next,
         {
             "sql": "sql_agent",
             "document": "document_agent",
@@ -538,8 +521,7 @@ def build_graph():
 
     # If the route is "both", execute SQL first
     # and then execute the Document Agent.
-    graph.add_conditional_edges(
-        "sql_agent",
+    graph.add_conditional_edges("sql_agent",
         lambda state: (
             "document_agent"
             if state["route"] == "both"
@@ -551,20 +533,11 @@ def build_graph():
         },
     )
 
-    graph.add_edge(
-        "document_agent",
-        "combine",
-    )
+    graph.add_edge("document_agent","combine",)
 
-    graph.add_edge(
-        "data_analyst",
-        "combine",
-    )
+    graph.add_edge("data_analyst","combine",)
 
-    graph.add_edge(
-        "combine",
-        END,
-    )
+    graph.add_edge("combine",END,)
 
     return graph.compile()
 
