@@ -3,6 +3,10 @@ Planner: routes a question to the SQL Agent, the Document Agent, or both,
 using LangGraph to define the workflow as a graph, then combines the
 results into one final answer.
 """
+import os
+import re
+
+from functools import lru_cache
 
 from typing import Literal, TypedDict
 
@@ -20,6 +24,17 @@ from app.utils.logger import get_logger, log_execution_time
 
 
 logger = get_logger(__name__)
+
+
+def is_advanced_workflow_enabled() -> bool:
+    """
+    Check whether the Phase 11 workflow is enabled.
+
+    Default: disabled to protect Portfolio V1.
+    """
+    return os.getenv(
+        "ADVANCED_WORKFLOW_ENABLED", "false"
+    ).strip().lower() in {"true", "1", "yes"}
 
 
 ROUTER_SYSTEM_PROMPT = """
@@ -544,10 +559,92 @@ def build_graph():
 
 planner_graph = build_graph()
 
-def analyze_with_details(
-    question: str,
-    dataframe=None,
-) -> dict:
+
+@lru_cache(maxsize=1)
+def get_advanced_graph():
+    """
+    Compile the advanced workflow once per process.
+
+    Lazy imports avoid circular-import problems because
+    the adapters reuse functions from this V1 module.
+    """
+    from app.workflows.advanced_graph import (
+        build_advanced_graph,
+    )
+    from app.workflows.agent_adapters import (
+        get_agent_adapters,
+    )
+
+    return build_advanced_graph(get_agent_adapters())
+
+
+def run_advanced_workflow(question: str, dataframe=None) -> dict:
+    """
+    Run the Phase 11 advanced workflow.
+
+    Before executing agents, check whether an
+    explicitly mentioned quarter lacks a year.
+    """
+
+    # Detect Q1, Q2, Q3, Q4, or named quarters.
+    quarter_pattern = (
+        r"\bq[1-4]\b"
+        r"|\b(?:first|second|third|fourth)\s+quarter\b"
+    )
+
+    # Detect an explicit four-digit reporting year.
+    year_pattern = r"\b(?:19|20)\d{2}\b"
+
+    has_quarter = bool(
+        re.search(quarter_pattern, question, re.IGNORECASE)
+    )
+
+    has_year = bool(
+        re.search(year_pattern, question)
+    )
+
+    # Avoid inventing a year when none was supplied.
+    if has_quarter and not has_year:
+        logger.info(
+            "Advanced workflow needs reporting-year clarification."
+        )
+
+        return {
+            "question": question,
+            "route": "",
+            "dataframe": dataframe,
+            "sql_result": None,
+            "doc_result": None,
+            "analytics_result": None,
+            "completed_steps": [],
+            "failed_steps": [],
+            "execution_count": 0,
+            "final_answer": (
+                "Which year should I use for this quarterly "
+                "analysis? Please specify the reporting year, "
+                "for example Q4 2024."
+            ),
+            "workflow_status": "needs_clarification",
+        }
+
+    initial_state = {
+        "question": question,
+        "route": "",
+        "dataframe": dataframe,
+        "sql_result": None,
+        "doc_result": None,
+        "analytics_result": None,
+        "final_answer": "",
+    }
+
+    # Preserve the existing V1 routing rules.
+    routed_state = route_question(initial_state)
+
+    # Execute the advanced supervisor.
+    return get_advanced_graph().invoke(routed_state)
+
+
+def analyze_with_details(question: str,dataframe=None,) -> dict:
     """
     Run the Planner workflow and return the complete result.
 
@@ -558,10 +655,16 @@ def analyze_with_details(
     the response cache because the complete workflow result
     may contain non-cacheable objects such as Plotly figures.
     """
+    if is_advanced_workflow_enabled():
+        logger.info(
+            "Phase 11 advanced workflow enabled."
+        )
+        return run_advanced_workflow(
+            question,
+            dataframe=dataframe,
+        )
 
-    logger.info(
-        "Running detailed analysis workflow."
-    )
+    logger.info("Running detailed analysis workflow.")
 
     result = planner_graph.invoke(
         {
@@ -577,10 +680,7 @@ def analyze_with_details(
 
     return result
 
-def answer_question(
-    question: str,
-    dataframe=None,
-) -> str:
+def answer_question(question: str,dataframe=None,) -> str:
     """
     Main entry point for the Planner workflow.
 
@@ -588,17 +688,23 @@ def answer_question(
     the LangGraph workflow when no cached answer exists.
     """
 
-    cached = get_cached_answer(
-        question,
-        dataframe=dataframe,
-    )
 
-    if cached:
-
+    if is_advanced_workflow_enabled():
         logger.info(
-            "Planner cache hit."
+            "Running Phase 11 without response cache."
         )
 
+        result = run_advanced_workflow(
+            question,
+            dataframe=dataframe,
+        )
+
+        return result["final_answer"]
+
+    cached = get_cached_answer(question,dataframe=dataframe,)
+
+    if cached:
+        logger.info("Planner cache hit.")
         return cached
 
     logger.info(
@@ -620,10 +726,6 @@ def answer_question(
 
     answer = result["final_answer"]
 
-    set_cached_answer(
-        question,
-        answer,
-        dataframe=dataframe,
-    )
+    set_cached_answer(question,answer,dataframe=dataframe,)
 
     return answer
